@@ -35,7 +35,7 @@ class SOMNetwork(nn.Module):
             RBF_Conv2d(1, 10*10 - 36, kernel_size=Conv2d_kernel[0], stride=stride),
             cReLU(0.4)
         )
-        # self.combine_layer = Combine_Conv2d(1, 10*10, kernel_size=[(8, 8), (6, 6)], stride=stride)
+        self.combine_layer = Combine_Conv2d(1, 10*10, kernel_size=[(8, 8), (6, 6)], stride=stride)
 
         if self.in_channels == 1:
             self.layer1 = [
@@ -73,17 +73,12 @@ class SOMNetwork(nn.Module):
     def forward(self, x):
         out: Tensor
         if self.in_channels == 3:
-            # RGB Plan 1
+            # RGB Plan v2
             RGB_output = self.RGB_preprocess(x)
+            RGB_output = get_RM(RGB_output, (6, 6, 6*6)).reshape(-1, 1, 6, 6)
             GRAY_output = self.GRAY_preprocess(Grayscale()(x))
-            input = torch.concat((RGB_output, GRAY_output), dim=1)
-
-            # RGB Plan 2
-            # RGB_output = self.RGB_preprocess(x)
-            # RGB_output = get_RM(RGB_output, (6, 6, 6*6)).reshape(-1, 1, 6, 6)
-            # GRAY_output = self.GRAY_preprocess(Grayscale()(x))
-            # GRAY_output = get_RM(GRAY_output, (6, 6, 8*8)).reshape(-1, 1, 8, 8)
-            # input = self.combine_layer(GRAY_output, RGB_output)
+            GRAY_output = get_RM(GRAY_output, (6, 6, 8*8)).reshape(-1, 1, 8, 8)
+            input = self.combine_layer(GRAY_output, RGB_output)
             
         output = self.layer1(input)
         output = self.layer2(output)
