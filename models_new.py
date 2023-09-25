@@ -157,36 +157,31 @@ class RGB_Conv2d(nn.Module):
         self.in_channels = in_channels
         self.rbf = get_rbf(rbf)
         
-        self.rgb_weight = torch.empty((out_channels, 3), **factory_kwargs)
+        self.rgb_weight = torch.empty((out_channels, 1, *self.kernel_size), **factory_kwargs)
         self.reset_parameters()
  
  
     def reset_parameters(self) -> None:
-        #由19種顏色之filter來找出區塊對應之顏色(每個filter代表一個顏色)
-        max_color = 1
-        min_color = 0
-        self.rgb_weight = torch.linspace(max_color, min_color, int((max_color - min_color) / (max_color / self.out_channels)))[:, None].repeat(1, 3).to('cuda')
+        init.kaiming_uniform_(self.rgb_weight, a=math.sqrt(5))
+        self.rgb_weight[0] = torch.zeros_like(self.rgb_weight[0])
         self.rgb_weight = nn.Parameter(self.rgb_weight)
     
     
     def forward(self, input: Tensor) -> Tensor:
-        #expand rgb_weight
-        rgb_weight_expand = torch.repeat_interleave(torch.repeat_interleave(self.rgb_weight.reshape(self.out_channels, self.in_channels, 1, 1), self.kernel_size[0], dim=2), self.kernel_size[1], dim=3)
         #計算output shape
         stride = torch.tensor(self.stride[0])
         batch_size = input.shape[0]
         output_height = torch.div((input.shape[2] - self.kernel_size[0]),  stride, rounding_mode='floor') + 1
         output_width = torch.div((input.shape[3] - self.kernel_size[1]),  stride, rounding_mode='floor') + 1
         rgb_result = torch.zeros((batch_size, self.out_channels, output_height, output_width), device = input.device)
-        dist = torch.zeros((input.shape[0], rgb_weight_expand.shape[0]), device = input.device)
         
         # RBF
         for k in range(rgb_result.shape[2]):
             for l in range(rgb_result.shape[3]):   
                 window = input[:, :, k*stride:k*stride+self.kernel_size[0], l*stride:l*stride+self.kernel_size[1]]
-                dist = torch.zeros((input.shape[0], rgb_weight_expand.shape[0]), device = input.device)
+                dist = torch.zeros((input.shape[0], self.rgb_weight.shape[0]), device = input.device)
                 for in_channel in range(input.shape[1]):
-                    dist += torch.cdist(window[:, in_channel].reshape(batch_size, -1), rgb_weight_expand[:, in_channel].reshape(rgb_weight_expand.shape[0], -1))
+                    dist += torch.cdist(window[:, in_channel].reshape(batch_size, -1), self.rgb_weight.reshape(self.rgb_weight.shape[0], -1))
                 self.std = torch.std(dist)
                 rgb_result[:, :, k, l] = self.rbf(dist, self.std)
         return rgb_result
