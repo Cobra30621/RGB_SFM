@@ -109,7 +109,7 @@ epoch = 200
 lr = 1e-3
 layer = 4
 stride = 4
-description = f"try change rbf to triangle with early stop and lr scheduler, no change std, lr = 1e-3, SFM combine filter = (2, 2)"
+description = f"try RGB_Plan_v2 with out_channel=2"
 
 if current_model == 'SFM': 
     model = SOMNetwork(in_channels=in_channels, out_channels=2).to("cuda")
@@ -149,7 +149,7 @@ wandb.init(
 
     notes = description,
 
-    group = "RGB_Plan_v1",
+    group = "RGB_Plan_v2",
     
     # track hyperparameters and run metadata
     config={
