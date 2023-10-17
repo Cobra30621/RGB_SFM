@@ -44,33 +44,39 @@ class CNN(nn.Module):
             nn.Conv2d(in_channels=32, out_channels=64, kernel_size=5), 
             nn.ReLU(), 
             nn.MaxPool2d(kernel_size=2),
+            nn.Dropout() 
         )
-        self.conv4 = nn.Sequential(
-            nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3), 
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2), 
-        )
-        self.conv5 = nn.Sequential(
-            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3), 
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2), 
-        )
+        # self.conv4 = nn.Sequential(
+        #     nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3), 
+        #     nn.ReLU(),
+        #     nn.MaxPool2d(kernel_size=2),
+        #     nn.Dropout() 
+        # )
+        # self.conv5 = nn.Sequential(
+        #     nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3), 
+        #     nn.ReLU(),
+        #     nn.MaxPool2d(kernel_size=2),
+        #     nn.Dropout() 
+        # )
         self.fc1 = nn.Sequential(
-            nn.Linear(4096, 1024),
-            nn.Linear(1024, 512),
+            # nn.Linear(4096, 1024),
+            nn.Linear(40000, 512),
             nn.Linear(512, 8)
         )
-        self.sigmoid = nn.Sigmoid() 
+        self.softmax = nn.Softmax(dim=-1) 
     def forward(self, x):
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
-        x = self.conv4(x)
-        x = self.conv5(x)
+        # x = self.conv4(x)
+        # x = self.conv5(x)
         x = x.view(x.size(0), -1) 
         x = self.fc1(x)
-        x = self.sigmoid(x)
-        return x
+        rgb = x[:, :3]
+        shape = x[:, 3:]
+        rgb = self.softmax(rgb)
+        shape = self.softmax(shape)
+        return rgb, shape
     
     
 class ResNet(nn.Module):

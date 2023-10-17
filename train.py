@@ -24,15 +24,23 @@ def train(train_dataloader: DataLoader, test_dataloader: DataLoader, model: nn.M
             model.train()
             progress = tqdm(enumerate(train_dataloader), desc="Loss: ", total=len(train_dataloader))
             losses = 0
+            rgb_correct = 0
+            shape_correct = 0
             correct = 0
             size = 0
             for batch, (X, y) in progress:
                 X = X.to(device); y= y.to(device)
-                pred = model(X)
-                # time_start = time.time()
-                # print(pred[0])
-                # print(y[0])
-                loss = loss_fn(pred, y)
+                rgb, shape = model(X)
+                print(rgb[:10], shape[:10])
+                print(y[:10])
+                print(loss_fn(rgb[0], y[0, :3]))
+                print(loss_fn(shape[0], y[0,3:]))
+                print(loss_fn(rgb[0], y[0, :3]) + loss_fn(shape[0], y[0,3:]))
+
+                print(torch.argmax(rgb,dim=-1)[0], torch.argmax(shape,dim=-1)[0])
+                print(torch.argmax(y[:, :3],dim=-1)[0], torch.argmax(y[:, 3:], dim=-1)[0])
+                # input()
+                loss = loss_fn(rgb, y[:, :3]) + loss_fn(shape, y[:,3:])
 
                 optimizer.zero_grad()
                 loss.backward()
@@ -41,12 +49,18 @@ def train(train_dataloader: DataLoader, test_dataloader: DataLoader, model: nn.M
                 losses += loss.detach().item()
                 size += len(X)
 
-                _, maxk = torch.topk(pred, 2, dim = -1, sorted = False)
-                _, y = torch.topk(y, 2, dim=-1, sorted = False)
+                # _, maxk = torch.topk(pred, 1, dim = -1, sorted = False)
+                # _, y = torch.topk(y, 1, dim=-1, sorted = False)
+                # correct += torch.eq(maxk, y).all(dim=-1).sum().detach().item()
+
+                rgb_correct += torch.eq(torch.argmax(rgb, dim=-1), torch.argmax(y[:, 3:],dim=-1)).sum()
+                shape_correct += torch.eq(torch.argmax(shape,dim=-1), torch.argmax(y[:, 3:],dim=-1)).sum()
+
+                maxk = torch.concat((torch.argmax(rgb,dim=-1)[:, None], torch.argmax(shape,dim=-1)[:, None]), dim=-1)
+                y = torch.concat((torch.argmax(y[:, 3:],dim=-1)[:, None], torch.argmax(y[:, 3:],dim=-1)[:, None]), dim = -1)
                 correct += torch.eq(maxk, y).all(dim=-1).sum().detach().item()
-                torch.cuda.synchronize()
-                # print(f'cal loss and accuracy: {time.time() - time_start}')
-                progress.set_description("Loss: {:.7f}, Accuracy: {:.7f}".format(losses/(batch+1), correct/size))
+
+                progress.set_description("Loss: {:.7f},Accuracy: {:.7f}, rgb_Accuracy: {:.7f}, shape_Accuracy: {:.7f}".format(losses/(batch+1), correct/size, rgb_correct/size, shape_correct/size))
 
             test_acc, test_loss, _ = test(test_dataloader, model, loss_fn, False, device = device)
             print(f"Test Accuracy: {test_acc}%, Test Loss: {test_loss}")
@@ -82,14 +96,15 @@ def test(dataloader: DataLoader, model: nn.Module, loss_fn, need_table = True, d
     table = []
     for X, y in dataloader:
         X = X.to(device); y= y.to(device)
-        pred = model(X)
+        rgb, shape = model(X)
         
-        loss = loss_fn(pred, y)
+        loss = loss_fn(rgb, y[:, :3]) + loss_fn(shape, y[:,3:])
         test_loss += loss
 
-        _, maxk = torch.topk(pred, 2, dim = -1, sorted = False)
-        _, y = torch.topk(y, 2, dim=-1, sorted = False)
-        batch_correct = torch.eq(maxk, y).all(dim=-1).sum().item()
+        maxk = torch.concat((torch.argmax(rgb,dim=-1), torch.argmax(shape,dim=-1)), dim=-1)
+        y = torch.concat((torch.argmax(y[:, 3:],dim=-1), torch.argmax(y[:, 3:],dim=-1)), dim = -1)
+        batch_correct = torch.eq(maxk, y).all(dim=-1).sum().detach().item()
+
         correct += batch_correct
         size += len(X)
 
@@ -112,7 +127,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using {device} device")
 root = os.path.dirname(__file__)
-current_model = 'SFM' # SFM, mlp, cnn, resnet50, alexnet, lenet, googlenet
+current_model = 'cnn' # SFM, mlp, cnn, resnet50, alexnet, lenet, googlenet
 dataset = 'rgb_simple_shape' # mnist, fashion, cifar10, malaria, malaria_split, rgb_simple_shape
 input_size = (64, 64)
 in_channels = 3 # 1, 3
@@ -159,7 +174,7 @@ wandb.init(
     # set the wandb project where this run will be logged
     project="paper experiment",
 
-    name = f"RGB_Plan_v1",
+    name = f"CNN_baseline_change loss calculate",
 
     notes = description,
 
@@ -182,15 +197,15 @@ wandb.init(
     "SFM filter": "(2, 2)",
     "lr scheduler": "ReduceLROnPlateau",
     "optimizer": "Adam",
-    "loss_fn": "BCELoss"
+    "loss_fn": "CrossEntropy"
     }
 )
 
 print(model)
 summary(model, input_size = (in_channels, *input_size))
 
-loss_fn = nn.BCELoss()
-# loss_fn = nn.CrossEntropyLoss()
+# loss_fn = nn.BCELoss()
+loss_fn = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 # optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
 scheduler = ReduceLROnPlateau(optimizer)
