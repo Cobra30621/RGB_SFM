@@ -8,17 +8,34 @@ import torch.nn.functional as F
 import torch
 import math
 
-class SOMNetwork(nn.Module):
+class SOMNetwork(BaseModel):
     def __init__(self, in_channels, out_channels) -> None:
         super().__init__()
         Conv2d_kernel = [(5, 5), (1, 1), (1, 1), (1, 1)]
+        channels = [in_channels, 100, 225, 625, 1225]
         SFM_filters = [(2, 2), (1, 3), (3, 1)]
+        strides = [4, 1, 1, 1]
+        w_arr = [4.0, 4.0, 4.0, 4.0]
+        bais_arr = [0.4, 0.1, 0.01, 0.01]
+        device = "cuda"
+
         self.convs = nn.ModuleList([
             nn.Sequential(
-                self._make_BasicBlock(1, 100, Conv2d_kernel[0], stride=4, filter = SFM_filters[0], bias=0.4),
-                self._make_BasicBlock(100, 225, Conv2d_kernel[1], filter = SFM_filters[1], bias=0.1),
-                self._make_BasicBlock(225, 625, Conv2d_kernel[2], filter = SFM_filters[2], bias=0.01),
-                self._make_ConvBlock(625, 1225, Conv2d_kernel[3], bias=0.01)
+                *[self._make_BasicBlock(channels[i], 
+                                        channels[i+1], 
+                                        Conv2d_kernel[i], 
+                                        stride = strides[i], 
+                                        filter = SFM_filters[i], 
+                                        bias=bais_arr[i], 
+                                        w = w_arr[i], 
+                                        device = device) for i in range(len(SFM_filters))],
+                self._make_ConvBlock(channels[-2], 
+                                     channels[-1], 
+                                     Conv2d_kernel[-1], 
+                                     stride = strides[-1], 
+                                     bias=bais_arr[-1], 
+                                     w=w_arr[i], 
+                                     device = device)
             ) for i in range(in_channels)
         ])
 
@@ -33,14 +50,14 @@ class SOMNetwork(nn.Module):
                     stride:int = 1,
                     padding:int = 0,
                     filter:tuple = (1,1),
-                    w = 5.0,
-                    bias = 0.4,):
+                    w = 4.0,
+                    bias = 0.4,
+                    device: str = "cuda"):
         return nn.Sequential(
-            RBF_Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride = stride, padding = padding, device = "cuda"),
-            # triangle(w=w, requires_grad = True, device = "cuda"),
-            gauss(std=2, device = "cuda"),
-            cReLU(bias=bias, requires_grad = True, device = "cuda"),
-            SFM(filter = filter, device = "cuda")
+            RBF_Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride = stride, padding = padding, device = device),
+            triangle(w=w, requires_grad = True, device = device),
+            cReLU(bias=bias, requires_grad = True, device = device),
+            SFM(filter = filter, device = device)
         )
 
     def _make_ConvBlock(self,
@@ -50,12 +67,12 @@ class SOMNetwork(nn.Module):
                     stride:int = 1,
                     padding:int = 0,
                     w = 4.0,
-                    bias = 0.4,):
+                    bias = 0.4,
+                    device = str: "cuda"):
         return nn.Sequential(
-            RBF_Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride = stride, device = "cuda"),
-            # triangle(w=w, requires_grad = True, device="cuda"),
-            gauss(std=2, device = "cuda"),
-            cReLU(bias=bias, requires_grad = True, device="cuda"),
+            RBF_Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride = stride, device = device),
+            triangle(w=w, requires_grad = True, device="cuda"),
+            cReLU(bias=bias, requires_grad = True, device=device),
         )
 
     def forward(self, x):
@@ -124,9 +141,11 @@ class triangle(nn.Module):
         return f"w = {self.w.item()}"
 
 class gauss(nn.Module):
-    def __init__(self, std, device):
+    def __init__(self, std, requires_grad: bool = True, device:str = "cuda"):
         super().__init__()
         self.std = torch.Tensor([std]).to(device)
+        if requires_grad:
+            self.std = nn.Parameter(self.std)
 
     def forward(self, d):
         return torch.exp(d / (-2 * torch.pow(self.std, 2)))
@@ -196,7 +215,7 @@ class SFM(nn.Module):
         return output
     
     def extra_repr(self) -> str:
-        return f"filter={self.filter}, alpha={self.alpha}"
+        return f"filter={self.filter}, alpha={self.alpha.item()}"
 
 
 

@@ -115,7 +115,7 @@ def train(train_dataloader: DataLoader, valid_dataloader: DataLoader, model: nn.
                     
     return cur_train_loss, cur_train_acc, best_valid_loss, best_valid_acc, checkpoint
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using {device} device")
 root = os.path.dirname(__file__)

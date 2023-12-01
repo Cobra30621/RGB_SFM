@@ -1,6 +1,6 @@
 from torch import nn
 
-class CNN(nn.Module):
+class CNN(BaseModel):
     def __init__(self, in_channels: int = 1, out_channels = 8):
         super(CNN, self).__init__()        
         self.conv1 = nn.Sequential(         
